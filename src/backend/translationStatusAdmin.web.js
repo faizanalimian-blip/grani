@@ -7,7 +7,9 @@ import { demoteStaleTranslations } from './translationStatusCore.js';
 // Export the PropertyTranslations collection before the first real run.
 export const reconcileTranslationStatus = webMethod(
     Permissions.Admin,
-    async (options = {}) => {
-        return demoteStaleTranslations({ dryRun: options.dryRun !== false });
+    async (options) => {
+        // The Velo test panel passes null when the parameter is left empty.
+        const dryRun = !(options && options.dryRun === false);
+        return demoteStaleTranslations({ dryRun });
     }
 );
