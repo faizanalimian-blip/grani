@@ -235,6 +235,7 @@ function setupRelatedRepeater(repeaterId, data, suffix) {
 
         repeater.onItemReady(($item, itemData) => {
             try { $item(`#image${s}`).src = itemData.gallery?.[0]?.src || ''; } catch (e) {}
+            try { $item(`#image${s}`).alt = itemData.title || ''; } catch (e) {}
             try { $item(`#title${s}`).text = itemData.title || ''; } catch (e) {}
 
             if ($item(`#price${s}`)) {
