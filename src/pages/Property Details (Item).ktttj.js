@@ -1,5 +1,7 @@
 import wixLocation from 'wix-location';
 import wixWindow from 'wix-window';
+import wixSeoFrontend from 'wix-seo-frontend';
+import { buildPropertySeo, withAltText } from 'public/propertySeo.js';
 import { getPropertyByIdAndLanguage, getPropertiesByLanguage } from 'backend/property-language-backend.web.js';
 
 let currentLanguage = 'en';
@@ -81,14 +83,43 @@ async function loadTranslatedContent() {
     console.log('🔄 [DETAIL] loading:', propertyId, 'lang:', currentLanguage);
 
     const result = await getPropertyByIdAndLanguage(propertyId, currentLanguage);
-    if (!result.success) throw new Error(result.error);
+    if (!result.success) {
+        // The item no longer exists: keep it out of search (no redirect).
+        if (result.error === 'Property not found') await setNoindex();
+        throw new Error(result.error);
+    }
 
     const d = result.data;
     currentPropertyData = d;
     if (result.fallback) console.log('⚠️ [DETAIL] English fallback used');
 
+    await applySeo(d);
+
     populateDetail(d, '');
     populateDetail(d, 'RTL');
+}
+
+// ── SEO: title, description, Open Graph, schema ─────────
+// Built from the listing data (public/propertySeo.js). Runs inside onReady so
+// search engines get it in the server-rendered HTML. URLs are not changed.
+// Sold or removed listings get noindex instead of a redirect.
+async function applySeo(d) {
+    try {
+        const active = (d.parentStatus || d.status) === 'Approved';
+        const url = wixLocation.url.split(/[?#]/)[0];
+        const seo = buildPropertySeo(d, d.language || currentLanguage, { url, active });
+        await Promise.all([
+            wixSeoFrontend.setTitle(seo.title),
+            wixSeoFrontend.setMetaTags(seo.metaTags),
+            wixSeoFrontend.setStructuredData(seo.structuredData)
+        ]);
+    } catch (e) {
+        console.warn('⚠️ [DETAIL] SEO tags not set:', e.message);
+    }
+}
+
+async function setNoindex() {
+    try { await wixSeoFrontend.setMetaTags([{ name: 'robots', content: 'noindex' }]); } catch (e) {}
 }
 
 function populateDetail(d, suffix) {
@@ -107,7 +138,7 @@ function populateDetail(d, suffix) {
     set('seaViewText', d.seaView ? t.yes : t.no);
 
     if (el('gallery') && d.gallery?.length > 0)
-        el('gallery').items = d.gallery;
+        el('gallery').items = withAltText(d.gallery, d, d.language || currentLanguage);
 
     if (el('priceRange')) {
         const min = fmtPrice(d.minPrice);

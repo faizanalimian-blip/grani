@@ -3,6 +3,7 @@ import { fetch } from 'wix-fetch';
 import { Permissions, webMethod } from 'wix-web-module';
 import { files } from 'wix-media.v2';
 import { elevate } from 'wix-auth';
+import { setTranslationStatus } from './translationStatusCore.js';
 
 // ─────────────────────────────────────────────────────────────────────────────
 // CONFIGURATION
@@ -252,6 +253,7 @@ async function runSync(deadline) {
     const stats = {
         fetched: 0, parsed: 0, inserted: 0, updated: 0,
         skipped: 0, flagged: 0, imagesPreserved: 0, imagesChanged: 0,
+        translationRowsSynced: 0,
         partial: false, errors: [], fieldChangeLog: []
     };
 
@@ -400,6 +402,18 @@ async function runSync(deadline) {
 
                 await wixData.update('Properties', merged, { suppressAuth: true });
                 stats.updated++;
+
+                // Keep the translation rows (what search and the pages read) in step
+                // with the property when its status changed (sold, reserved, back on sale).
+                if (existingFull.status !== merged.status) {
+                    try {
+                        stats.translationRowsSynced += await setTranslationStatus(existingId, merged.status);
+                    } catch (tErr) {
+                        const msg = `Translation status sync failed for kwRef=${propFresh.kwRef}: ${tErr.message}`;
+                        stats.errors.push(msg);
+                        log('TRANSLATION_STATUS_ERROR', msg);
+                    }
+                }
             } catch (err) {
                 const msg = `Update failed for kwRef=${propFresh.kwRef}: ${err.message}`;
                 stats.errors.push(msg);
@@ -430,6 +444,16 @@ async function runSync(deadline) {
                         kwLastSynced: new Date(), updatedAt: new Date()
                     }, { suppressAuth: true });
                     stats.flagged++;
+
+                    // Hide the translation rows too, otherwise the listing stays in
+                    // search and its page keeps working.
+                    try {
+                        stats.translationRowsSynced += await setTranslationStatus(_id, 'Pending');
+                    } catch (tErr) {
+                        const msg = `Translation status sync failed for kwRef=${ref}: ${tErr.message}`;
+                        stats.errors.push(msg);
+                        log('TRANSLATION_STATUS_ERROR', msg);
+                    }
                 } catch (err) {
                     const msg = `Flag failed for kwRef=${ref}: ${err.message}`;
                     stats.errors.push(msg);

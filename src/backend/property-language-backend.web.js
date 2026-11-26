@@ -71,6 +71,10 @@ export const getPropertyByIdAndLanguage = webMethod(
 
             if (propResult.items.length > 0) {
                 data.gallery = propResult.items[0].gallery || [];
+                // Parent status is the source of truth for "is this listing live"
+                // (translation rows can lag). Used by the page for noindex.
+                data.parentStatus = propResult.items[0].status || null;
+                data.parentKwStatus = propResult.items[0].kwStatus || null;
             }
 
             return { success: true, data, fallback };
